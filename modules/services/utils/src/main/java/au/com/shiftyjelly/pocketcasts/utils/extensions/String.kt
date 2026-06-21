@@ -116,6 +116,7 @@ fun String.toUuidOrNull() = runCatching { UUID.fromString(this) }.getOrNull()
 
 fun String.sha1(): String? = hashString("SHA-1")
 fun String.sha256(): String? = hashString("SHA-256")
+fun String.md5(): String? = hashString("MD5")
 fun List<String>.md5(): String? = this.joinToString(",").hashString("MD5")
 
 /**

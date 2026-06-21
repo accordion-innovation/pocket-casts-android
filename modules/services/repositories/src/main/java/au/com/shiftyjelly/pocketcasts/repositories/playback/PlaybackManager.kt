@@ -218,6 +218,11 @@ open class PlaybackManager @Inject constructor(
     private var episodeLastBufferStatus: EpisodeBufferStatus? = null
     private var focusWasPlaying: Date? = null
     private var forcePlayerSwitch = false
+
+    // Accordion: optional override stream url for an episode, set when the user picks an audio
+    // "variant" of the episode. Stored as (episodeUuid to url) so a stale override is never applied
+    // to a different episode.
+    private var accordionVariantOverride: Pair<String, String>? = null
     private var updateTimerDisposable: Disposable? = null
     private var bufferUpdateTimerDisposable: Disposable? = null
     private var pauseTimerDisposable: Disposable? = null
@@ -581,6 +586,31 @@ open class PlaybackManager @Inject constructor(
                 sourceView = sourceView,
             )
         }
+    }
+
+    /**
+     * Swap the currently-playing episode's audio to a different Accordion "variant" ([downloadUrl])
+     * and reload it in ExoPlayer, preserving the current playback position.
+     *
+     * Streaming only: a downloaded episode plays from its local file, so swapping its stream url is
+     * a no-op. Does nothing if no episode is currently loaded.
+     */
+    suspend fun swapToVariantUrl(downloadUrl: String) {
+        val episode = upNextQueue.currentEpisode
+        if (episode == null) {
+            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Ignoring Accordion variant swap, nothing is playing")
+            return
+        }
+        if (episode.isDownloaded) {
+            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Ignoring Accordion variant swap for downloaded episode ${episode.uuid}")
+            return
+        }
+        LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion variant swap for episode ${episode.uuid}")
+        accordionVariantOverride = episode.uuid to downloadUrl
+        // Force the player to be recreated so ExoPlayer loads the new media source. loadCurrentEpisode
+        // captures and restores the current position when the episode is unchanged.
+        forcePlayerSwitch = true
+        loadCurrentEpisode(play = isPlaying())
     }
 
     // Returning null means a source should not affect the auto play behavior. Listening history is not
@@ -1928,6 +1958,14 @@ open class PlaybackManager @Inject constructor(
                         return
                     }
                 }
+            }
+        }
+
+        // Accordion: if the user picked an audio variant for this episode, override the stream url
+        // after the standard refresh above so ExoPlayer loads the selected variant.
+        accordionVariantOverride?.let { (uuid, variantUrl) ->
+            if (uuid == episode.uuid && !episode.isDownloaded) {
+                episode.downloadUrl = variantUrl
             }
         }
 
