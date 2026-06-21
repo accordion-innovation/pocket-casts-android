@@ -12,6 +12,8 @@ import au.com.shiftyjelly.pocketcasts.preferences.AccessToken
 import au.com.shiftyjelly.pocketcasts.preferences.RefreshToken
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.servers.OkHttpInterceptor
+import au.com.shiftyjelly.pocketcasts.servers.accordion.AccordionConfig
+import au.com.shiftyjelly.pocketcasts.servers.accordion.AccordionService
 import au.com.shiftyjelly.pocketcasts.servers.adapters.ExecutorEnqueueAdapterFactory
 import au.com.shiftyjelly.pocketcasts.servers.adapters.InstantAdapter
 import au.com.shiftyjelly.pocketcasts.servers.addInterceptors
@@ -437,7 +439,28 @@ class NetworkModule {
     @Provides
     @Singleton
     fun provideAnalyticsLiveService(@AnalyticsLiveRetrofit retrofit: Retrofit): AnalyticsLiveService = retrofit.create()
+
+    @Provides
+    @AccordionServiceRetrofit
+    @Singleton
+    fun provideAccordionRetrofit(
+        builder: Retrofit.Builder,
+        @NoCache httpClient: Lazy<OkHttpClient>,
+    ): Retrofit {
+        return builder
+            .baseUrl(AccordionConfig.BASE_URL)
+            .callFactory { request -> httpClient.get().newCall(request) }
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAccordionService(@AccordionServiceRetrofit retrofit: Retrofit): AccordionService = retrofit.create()
 }
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class AccordionServiceRetrofit
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
