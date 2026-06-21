@@ -20,10 +20,12 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.asFlow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import au.com.shiftyjelly.pocketcasts.analytics.SourceView
+import au.com.shiftyjelly.pocketcasts.compose.AppTheme
 import au.com.shiftyjelly.pocketcasts.compose.components.SegmentedTabBar
 import au.com.shiftyjelly.pocketcasts.compose.components.SegmentedTabBarDefaults
 import au.com.shiftyjelly.pocketcasts.compose.theme
@@ -33,6 +35,7 @@ import au.com.shiftyjelly.pocketcasts.models.to.PlaybackEffects
 import au.com.shiftyjelly.pocketcasts.models.type.TrimMode
 import au.com.shiftyjelly.pocketcasts.player.R
 import au.com.shiftyjelly.pocketcasts.player.databinding.FragmentEffectsBinding
+import au.com.shiftyjelly.pocketcasts.player.viewmodel.AccordionVariantViewModel
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.PlayerViewModel
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.PlayerViewModel.PlaybackEffectsSettingsTab
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
@@ -79,6 +82,7 @@ class EffectsFragment :
     override val statusBarIconColor = StatusBarIconColor.Light
 
     private val viewModel: PlayerViewModel by activityViewModels()
+    private val accordionVariantViewModel: AccordionVariantViewModel by viewModels()
     private var binding: FragmentEffectsBinding? = null
     private val trimToggleGroupButtonIds = arrayOf(R.id.trimLow, R.id.trimMedium, R.id.trimHigh)
     private var playbackSpeedTrackingDebouncer: Debouncer = Debouncer()
@@ -152,6 +156,14 @@ class EffectsFragment :
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        binding?.accordionVariantPanel?.setContent {
+            AppTheme(theme.activeTheme) {
+                AccordionVariantPanel(viewModel = accordionVariantViewModel)
+            }
+        }
+        accordionVariantViewModel.loadVariantsForCurrentEpisode()
+
         viewModel.playingEpisodeLive.observe(viewLifecycleOwner) { (_, backgroundColor) ->
             setDialogTint(backgroundColor)
 
