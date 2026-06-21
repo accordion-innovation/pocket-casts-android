@@ -11,14 +11,14 @@ class AccordionManager @Inject constructor(
     private val service: AccordionService,
 ) {
     /**
-     * Returns the audio variants for the episode identified by [podcastHash] / [episodeHash].
-     * Returns an empty list if the episode has no variants. Throws if the network call fails so the
-     * caller can surface or swallow the error as appropriate.
+     * Returns the audio variants for the episode identified by [podcastHash] (md5 of the RSS feed
+     * url) and [episodeTitle]. Returns an empty list if the episode has no variants. Throws if the
+     * network call fails so the caller can surface or swallow the error as appropriate.
      */
-    suspend fun getVariants(podcastHash: String, episodeHash: String): List<AccordionVariant> {
+    suspend fun getVariants(podcastHash: String, episodeTitle: String): List<AccordionVariant> {
         val response = service.getEpisode(
             podcastHash = podcastHash,
-            episodeHash = episodeHash,
+            episodeTitle = episodeTitle,
             apiKey = AccordionConfig.API_KEY,
         )
         return response.podcast?.episode?.audioFiles.orEmpty().mapNotNull { audioFile ->

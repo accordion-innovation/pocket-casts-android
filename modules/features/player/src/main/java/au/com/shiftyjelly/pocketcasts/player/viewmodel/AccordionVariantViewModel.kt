@@ -20,12 +20,10 @@ import kotlinx.coroutines.launch
  * Loads the available Accordion audio "variants" for the currently-playing episode and swaps the
  * player to a different variant when the user selects one.
  *
- * The episode is identified to the Accordion API the same way as the existing web content API:
- * `podcast_hash` = md5(podcast RSS feed url) and `episode_hash` = md5(episode title).
- *
- * NOTE: Pocket Casts does not store the original RSS `<guid>`, so [episodeHash] is derived from the
- * episode title (matching the Accordion server's no-guid fallback). If the server keys episodes on
- * md5(guid) instead, the guid must be plumbed through here.
+ * The episode is identified to the Accordion API by podcast + title (feed+title lookup):
+ * `podcast_hash` = md5(podcast RSS feed url) and the raw `episode_title`. Pocket Casts does not
+ * store the RSS `<guid>` that Accordion's `episode_hash` is derived from, so the server resolves
+ * the episode by title within the podcast instead.
  */
 @HiltViewModel
 class AccordionVariantViewModel @Inject constructor(
@@ -64,11 +62,11 @@ class AccordionVariantViewModel @Inject constructor(
                 val podcast = podcastManager.findPodcastByUuid(episode.podcastUuid)
                 val feedUrl = podcast?.podcastUrl
                 val podcastHash = feedUrl?.takeIf { it.isNotBlank() }?.md5()
-                val episodeHash = episode.title.takeIf { it.isNotBlank() }?.md5()
-                if (podcastHash == null || episodeHash == null) {
+                val episodeTitle = episode.title.takeIf { it.isNotBlank() }
+                if (podcastHash == null || episodeTitle == null) {
                     emptyList()
                 } else {
-                    accordionManager.getVariants(podcastHash = podcastHash, episodeHash = episodeHash)
+                    accordionManager.getVariants(podcastHash = podcastHash, episodeTitle = episodeTitle)
                 }
             } catch (e: Exception) {
                 LogBuffer.e(LogBuffer.TAG_PLAYBACK, e, "Failed to load Accordion variants")
