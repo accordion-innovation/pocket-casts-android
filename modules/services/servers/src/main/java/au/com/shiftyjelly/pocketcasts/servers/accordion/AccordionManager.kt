@@ -16,7 +16,7 @@ class AccordionManager @Inject constructor(
      * network call fails so the caller can surface or swallow the error as appropriate.
      */
     suspend fun getVariants(podcastHash: String, episodeTitle: String): List<AccordionVariant> {
-        val response = service.getEpisode(
+        val response = service.getEpisodeByTitle(
             podcastHash = podcastHash,
             episodeTitle = episodeTitle,
             apiKey = AccordionConfig.API_KEY,
