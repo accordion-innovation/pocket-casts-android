@@ -53,9 +53,11 @@ class AccordionVariantViewModel @Inject constructor(
     fun loadVariantsForCurrentEpisode() {
         val episode = playbackManager.getCurrentEpisode() as? PodcastEpisode
         if (episode == null) {
+            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: no current PodcastEpisode, hiding panel")
             _uiState.value = UiState.Hidden
             return
         }
+        LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: loading variants for \"${episode.title}\" (uuid=${episode.uuid})")
         _uiState.value = UiState.Loading
         viewModelScope.launch {
             val variants = try {
@@ -63,16 +65,19 @@ class AccordionVariantViewModel @Inject constructor(
                 val feedUrl = podcast?.podcastUrl
                 val podcastHash = feedUrl?.takeIf { it.isNotBlank() }?.md5()
                 val episodeTitle = episode.title.takeIf { it.isNotBlank() }
+                LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: feedUrl=\"$feedUrl\" podcastHash=$podcastHash episodeTitle=\"$episodeTitle\"")
                 if (podcastHash == null || episodeTitle == null) {
+                    LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: missing hash or title, hiding panel")
                     emptyList()
                 } else {
                     accordionManager.getVariants(podcastHash = podcastHash, episodeTitle = episodeTitle)
                 }
             } catch (e: Exception) {
-                LogBuffer.e(LogBuffer.TAG_PLAYBACK, e, "Failed to load Accordion variants")
+                LogBuffer.e(LogBuffer.TAG_PLAYBACK, e, "Accordion: failed to load variants")
                 emptyList()
             }
 
+            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: got ${variants.size} variant(s)")
             // Only show the panel when there is an actual choice to make.
             _uiState.value = if (variants.size < 2) {
                 UiState.Hidden
