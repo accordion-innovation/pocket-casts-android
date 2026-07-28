@@ -38,7 +38,7 @@ fun AccordionVariantPanel(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     AccordionVariantContent(
         state = state,
-        onVariantSelected = viewModel::onVariantSelected,
+        onVariantSelect = viewModel::onVariantSelected,
         modifier = modifier,
     )
 }
@@ -46,7 +46,7 @@ fun AccordionVariantPanel(
 @Composable
 private fun AccordionVariantContent(
     state: UiState,
-    onVariantSelected: (Int) -> Unit,
+    onVariantSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when (state) {
@@ -69,7 +69,7 @@ private fun AccordionVariantContent(
                 Slider(
                     value = state.selectedIndex.toFloat(),
                     onValueChange = { value ->
-                        onVariantSelected(value.roundToInt().coerceIn(0, variants.lastIndex))
+                        onVariantSelect(value.roundToInt().coerceIn(0, variants.lastIndex))
                     },
                     valueRange = 0f..variants.lastIndex.toFloat(),
                     steps = (variants.size - 2).coerceAtLeast(0),

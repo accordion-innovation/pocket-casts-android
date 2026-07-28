@@ -607,10 +607,14 @@ open class PlaybackManager @Inject constructor(
         }
         LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion variant swap for episode ${episode.uuid}")
         accordionVariantOverride = episode.uuid to downloadUrl
-        // Force the player to be recreated so ExoPlayer loads the new media source. loadCurrentEpisode
-        // captures and restores the current position when the episode is unchanged.
-        forcePlayerSwitch = true
-        loadCurrentEpisode(play = isPlaying())
+        // loadCurrentEpisode does blocking database work, so it must not run on the caller's thread
+        // (callers are typically UI scopes). Match the dispatcher the rest of this class launches on.
+        withContext(Dispatchers.Default) {
+            // Force the player to be recreated so ExoPlayer loads the new media source. loadCurrentEpisode
+            // captures and restores the current position when the episode is unchanged.
+            forcePlayerSwitch = true
+            loadCurrentEpisode(play = isPlaying())
+        }
     }
 
     // Returning null means a source should not affect the auto play behavior. Listening history is not
