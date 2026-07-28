@@ -105,10 +105,23 @@ class AccordionVariantViewModel @Inject constructor(
             LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: got ${variants.size} variant(s)")
             // Only show the panel when there is an actual choice to make. Keep loadedEpisodeUuid set
             // so this stays resolved for the episode and we don't re-request on every playback change.
-            _uiState.value = if (variants.size < 2) {
-                UiState.Hidden
-            } else {
-                UiState.Loaded(variants = variants, selectedIndex = 0)
+            if (variants.size < 2) {
+                _uiState.value = UiState.Hidden
+                return@launch
+            }
+
+            // Default to the longest variant: it best represents the full RSS audio that is
+            // currently playing, so the displayed selection matches what the user hears.
+            // Immediately swap to it so the player's duration and stream URL are both accurate
+            // from the moment the panel appears.
+            val longestIndex = variants.indices.maxByOrNull { variants[it].durationSeconds } ?: 0
+            _uiState.value = UiState.Loaded(variants = variants, selectedIndex = longestIndex)
+
+            val longestVariant = variants[longestIndex]
+            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: auto-selecting longest variant (index=$longestIndex, ${longestVariant.durationSeconds}s)")
+            if (!playbackManager.swapToVariantUrl(longestVariant.url, longestVariant.durationSeconds)) {
+                LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: auto-select swap was not applied, hiding panel")
+                hide()
             }
         }
     }

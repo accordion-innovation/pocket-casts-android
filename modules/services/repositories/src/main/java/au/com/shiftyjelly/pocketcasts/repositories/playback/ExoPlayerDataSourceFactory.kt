@@ -67,6 +67,13 @@ class ExoPlayerDataSourceFactory @Inject constructor(
         onCachingComplete: (String) -> Unit = {},
     ): MediaSource? {
         val episodeUri = episodeLocation.uri ?: return null
+        // Cache key: episode UUID + URL base-path (before the query string).
+        // Using just the episode UUID lets different signed URLs for the *same* RSS audio share one
+        // cache entry, which is the normal case.  However, Accordion variant URLs point to entirely
+        // different audio files — they must NOT share a cache entry.  Including the URL base-path
+        // (which is stable across signed-URL refreshes but differs between variants) keeps cache
+        // sharing for RSS audio while giving each accordion variant its own entry.
+        val cacheKey = "${episodeLocation.episode.uuid}|${episodeUri.substringBefore("?")}"
         val mediaItem = MediaItem.Builder()
             .setUri(episodeUri)
             .let { builder ->
@@ -76,7 +83,7 @@ class ExoPlayerDataSourceFactory @Inject constructor(
                     builder
                 }
             }
-            .setCustomCacheKey(episodeLocation.episode.uuid)
+            .setCustomCacheKey(cacheKey)
             .build()
 
         val extractorsFactory = DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true)

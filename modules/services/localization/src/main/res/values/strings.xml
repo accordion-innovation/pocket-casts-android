@@ -2842,5 +2842,5 @@
     <string name="tv_create_account_title">Create your free account</string>
     <string name="tv_create_account_subtitle">Scan this code to get started on your phone, it only takes a minute.</string>
     <string name="tv_create_account_come_back">Once you\'ve created your account, come back and sign in</string>
-    <string name="player_effects_audio_version">Audio version</string>
+    <string name="player_effects_audio_version">Choose your duration</string>
 </resources>
