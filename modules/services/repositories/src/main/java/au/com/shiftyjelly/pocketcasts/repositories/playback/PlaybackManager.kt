@@ -219,10 +219,10 @@ open class PlaybackManager @Inject constructor(
     private var focusWasPlaying: Date? = null
     private var forcePlayerSwitch = false
 
-    // Accordion: optional override stream url for an episode, set when the user picks an audio
-    // "variant" of the episode. Stored as (episodeUuid to url) so a stale override is never applied
-    // to a different episode.
-    private var accordionVariantOverride: Pair<String, String>? = null
+    // Accordion: optional override stream url + duration for an episode, set when the user picks an
+    // audio "variant" of the episode. Stored as Triple(episodeUuid, url, durationSeconds) so a stale
+    // override is never applied to a different episode.
+    private var accordionVariantOverride: Triple<String, String, Long>? = null
     private var updateTimerDisposable: Disposable? = null
     private var bufferUpdateTimerDisposable: Disposable? = null
     private var pauseTimerDisposable: Disposable? = null
@@ -599,7 +599,7 @@ open class PlaybackManager @Inject constructor(
      * the episode is downloaded so it has no stream url to swap). Callers driving UI should use this
      * to avoid showing a variant as selected when the audio did not actually change.
      */
-    suspend fun swapToVariantUrl(downloadUrl: String): Boolean {
+    suspend fun swapToVariantUrl(downloadUrl: String, durationSeconds: Long): Boolean {
         val episode = upNextQueue.currentEpisode
         if (episode == null) {
             LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Ignoring Accordion variant swap, nothing is playing")
@@ -610,7 +610,7 @@ open class PlaybackManager @Inject constructor(
             return false
         }
         LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion variant swap for episode ${episode.uuid}")
-        accordionVariantOverride = episode.uuid to downloadUrl
+        accordionVariantOverride = Triple(episode.uuid, downloadUrl, durationSeconds)
         // loadCurrentEpisode does blocking database work, so it must not run on the caller's thread
         // (callers are typically UI scopes). Match the dispatcher the rest of this class launches on.
         withContext(Dispatchers.Default) {
@@ -1971,10 +1971,13 @@ open class PlaybackManager @Inject constructor(
         }
 
         // Accordion: if the user picked an audio variant for this episode, override the stream url
-        // after the standard refresh above so ExoPlayer loads the selected variant.
-        accordionVariantOverride?.let { (uuid, variantUrl) ->
+        // and duration after the standard refresh above so ExoPlayer loads the selected variant.
+        accordionVariantOverride?.let { (uuid, variantUrl, durationSeconds) ->
             if (uuid == episode.uuid && !episode.isDownloaded) {
                 episode.downloadUrl = variantUrl
+                if (durationSeconds > 0L) {
+                    episode.duration = durationSeconds.toDouble()
+                }
             }
         }
 

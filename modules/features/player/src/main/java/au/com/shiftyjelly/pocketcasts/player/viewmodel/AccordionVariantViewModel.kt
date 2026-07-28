@@ -133,7 +133,7 @@ class AccordionVariantViewModel @Inject constructor(
         // the player could not actually apply it.
         _uiState.value = state.copy(selectedIndex = index)
         viewModelScope.launch {
-            if (!playbackManager.swapToVariantUrl(variant.url)) {
+            if (!playbackManager.swapToVariantUrl(variant.url, variant.durationSeconds)) {
                 // Variant switching no longer applies to this episode (it finished downloading while
                 // the panel was open). Leaving the control up would silently do nothing on every drag.
                 LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: variant swap was not applied, hiding panel")
