@@ -594,16 +594,20 @@ open class PlaybackManager @Inject constructor(
      *
      * Streaming only: a downloaded episode plays from its local file, so swapping its stream url is
      * a no-op. Does nothing if no episode is currently loaded.
+     *
+     * @return true when the variant was applied, false when it could not be (nothing is playing, or
+     * the episode is downloaded so it has no stream url to swap). Callers driving UI should use this
+     * to avoid showing a variant as selected when the audio did not actually change.
      */
-    suspend fun swapToVariantUrl(downloadUrl: String) {
+    suspend fun swapToVariantUrl(downloadUrl: String): Boolean {
         val episode = upNextQueue.currentEpisode
         if (episode == null) {
             LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Ignoring Accordion variant swap, nothing is playing")
-            return
+            return false
         }
         if (episode.isDownloaded) {
             LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Ignoring Accordion variant swap for downloaded episode ${episode.uuid}")
-            return
+            return false
         }
         LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion variant swap for episode ${episode.uuid}")
         accordionVariantOverride = episode.uuid to downloadUrl
@@ -615,6 +619,7 @@ open class PlaybackManager @Inject constructor(
             forcePlayerSwitch = true
             loadCurrentEpisode(play = isPlaying())
         }
+        return true
     }
 
     // Returning null means a source should not affect the auto play behavior. Listening history is not

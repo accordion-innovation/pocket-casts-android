@@ -49,14 +49,32 @@ class AccordionVariantViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<UiState>(UiState.Hidden)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    /** Fetch the variants for whatever episode is currently loaded in the player. */
+    /** Uuid of the episode [uiState]'s variants belong to, so a stale panel is never acted on. */
+    private var loadedEpisodeUuid: String? = null
+
+    /**
+     * Fetch the variants for whatever episode is currently loaded in the player. Safe to call on
+     * every playback change: it is a no-op while already showing the current episode's variants, so
+     * the user's selection survives unrelated updates.
+     */
     fun loadVariantsForCurrentEpisode() {
         val episode = playbackManager.getCurrentEpisode() as? PodcastEpisode
         if (episode == null) {
             LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: no current PodcastEpisode, hiding panel")
-            _uiState.value = UiState.Hidden
+            hide()
             return
         }
+        // A downloaded episode plays from its local file, so the player cannot swap its stream url.
+        // Don't offer a choice that can't be applied (and don't spend a request discovering it).
+        if (episode.isDownloaded) {
+            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: episode ${episode.uuid} is downloaded, hiding panel")
+            hide()
+            return
+        }
+        if (episode.uuid == loadedEpisodeUuid) {
+            return
+        }
+        loadedEpisodeUuid = episode.uuid
         LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: loading variants for \"${episode.title}\" (uuid=${episode.uuid})")
         _uiState.value = UiState.Loading
         viewModelScope.launch {
@@ -77,8 +95,16 @@ class AccordionVariantViewModel @Inject constructor(
                 emptyList()
             }
 
+            // The episode may have changed while this request was in flight; a late response must not
+            // replace the panel belonging to whatever is playing now.
+            if (loadedEpisodeUuid != episode.uuid) {
+                LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: discarding stale variants for ${episode.uuid}")
+                return@launch
+            }
+
             LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: got ${variants.size} variant(s)")
-            // Only show the panel when there is an actual choice to make.
+            // Only show the panel when there is an actual choice to make. Keep loadedEpisodeUuid set
+            // so this stays resolved for the episode and we don't re-request on every playback change.
             _uiState.value = if (variants.size < 2) {
                 UiState.Hidden
             } else {
@@ -92,9 +118,33 @@ class AccordionVariantViewModel @Inject constructor(
         val state = _uiState.value as? UiState.Loaded ?: return
         if (index == state.selectedIndex) return
         val variant = state.variants.getOrNull(index) ?: return
+
+        // The player applies the swap to whatever is playing now. If that is no longer the episode
+        // these variants were loaded for, applying one would put the wrong audio on the wrong
+        // episode, so drop the panel instead.
+        val currentUuid = playbackManager.getCurrentEpisode()?.uuid
+        if (currentUuid == null || currentUuid != loadedEpisodeUuid) {
+            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: episode changed since variants loaded, hiding panel")
+            hide()
+            return
+        }
+
+        // Move the selection straight away so the control feels responsive, then reconcile below if
+        // the player could not actually apply it.
         _uiState.value = state.copy(selectedIndex = index)
         viewModelScope.launch {
-            playbackManager.swapToVariantUrl(variant.url)
+            if (!playbackManager.swapToVariantUrl(variant.url)) {
+                // Variant switching no longer applies to this episode (it finished downloading while
+                // the panel was open). Leaving the control up would silently do nothing on every drag.
+                LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: variant swap was not applied, hiding panel")
+                hide()
+            }
         }
+    }
+
+    /** Hide the panel and forget the episode, so the next load re-evaluates from scratch. */
+    private fun hide() {
+        loadedEpisodeUuid = null
+        _uiState.value = UiState.Hidden
     }
 }

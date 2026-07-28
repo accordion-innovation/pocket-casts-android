@@ -28,7 +28,10 @@ import au.com.shiftyjelly.pocketcasts.localization.R as LR
 
 /**
  * Panel shown in the playback effects sheet that lets the user switch between the available
- * Accordion audio variants of the current episode. Hidden unless there are at least two variants.
+ * Accordion audio variants of the current episode.
+ *
+ * Hidden unless the episode is streaming and has at least two variants — a downloaded episode plays
+ * from its local file, so the player has no stream url to swap.
  */
 @Composable
 fun AccordionVariantPanel(
