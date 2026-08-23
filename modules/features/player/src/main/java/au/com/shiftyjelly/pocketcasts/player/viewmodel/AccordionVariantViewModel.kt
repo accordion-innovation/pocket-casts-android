@@ -8,6 +8,8 @@ import au.com.shiftyjelly.pocketcasts.repositories.podcast.PodcastManager
 import au.com.shiftyjelly.pocketcasts.servers.accordion.AccordionManager
 import au.com.shiftyjelly.pocketcasts.servers.accordion.AccordionVariant
 import au.com.shiftyjelly.pocketcasts.utils.extensions.md5
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.Feature
+import au.com.shiftyjelly.pocketcasts.utils.featureflag.FeatureFlag
 import au.com.shiftyjelly.pocketcasts.utils.log.LogBuffer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -58,16 +60,20 @@ class AccordionVariantViewModel @Inject constructor(
      * the user's selection survives unrelated updates.
      */
     fun loadVariantsForCurrentEpisode() {
+        // Looking an episode up tells accordion.live what the user is listening to, so nothing is
+        // requested unless the feature is switched on for this install.
+        if (!FeatureFlag.isEnabled(Feature.ACCORDION_AUDIO_VARIANTS)) {
+            hide()
+            return
+        }
         val episode = playbackManager.getCurrentEpisode() as? PodcastEpisode
         if (episode == null) {
-            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: no current PodcastEpisode, hiding panel")
             hide()
             return
         }
         // A downloaded episode plays from its local file, so the player cannot swap its stream url.
         // Don't offer a choice that can't be applied (and don't spend a request discovering it).
         if (episode.isDownloaded) {
-            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: episode ${episode.uuid} is downloaded, hiding panel")
             hide()
             return
         }
@@ -75,17 +81,16 @@ class AccordionVariantViewModel @Inject constructor(
             return
         }
         loadedEpisodeUuid = episode.uuid
-        LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: loading variants for \"${episode.title}\" (uuid=${episode.uuid})")
         _uiState.value = UiState.Loading
         viewModelScope.launch {
             val variants = try {
                 val podcast = podcastManager.findPodcastByUuid(episode.podcastUuid)
-                val feedUrl = podcast?.podcastUrl
-                val podcastHash = feedUrl?.takeIf { it.isNotBlank() }?.md5()
+                // Only the hash is ever logged. A feed url can carry a per-user access token for a
+                // private or premium feed, and LogBuffer ends up in the debug log users attach to
+                // support emails.
+                val podcastHash = podcast?.podcastUrl?.takeIf { it.isNotBlank() }?.md5()
                 val episodeTitle = episode.title.takeIf { it.isNotBlank() }
-                LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: feedUrl=\"$feedUrl\" podcastHash=$podcastHash episodeTitle=\"$episodeTitle\"")
                 if (podcastHash == null || episodeTitle == null) {
-                    LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: missing hash or title, hiding panel")
                     emptyList()
                 } else {
                     accordionManager.getVariants(podcastHash = podcastHash, episodeTitle = episodeTitle)
@@ -98,11 +103,9 @@ class AccordionVariantViewModel @Inject constructor(
             // The episode may have changed while this request was in flight; a late response must not
             // replace the panel belonging to whatever is playing now.
             if (loadedEpisodeUuid != episode.uuid) {
-                LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: discarding stale variants for ${episode.uuid}")
                 return@launch
             }
 
-            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: got ${variants.size} variant(s)")
             // Only show the panel when there is an actual choice to make. Keep loadedEpisodeUuid set
             // so this stays resolved for the episode and we don't re-request on every playback change.
             if (variants.size < 2) {
@@ -118,9 +121,7 @@ class AccordionVariantViewModel @Inject constructor(
             _uiState.value = UiState.Loaded(variants = variants, selectedIndex = longestIndex)
 
             val longestVariant = variants[longestIndex]
-            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: auto-selecting longest variant (index=$longestIndex, ${longestVariant.durationSeconds}s)")
             if (!playbackManager.swapToVariantUrl(longestVariant.url, longestVariant.durationSeconds)) {
-                LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: auto-select swap was not applied, hiding panel")
                 hide()
             }
         }
@@ -137,7 +138,6 @@ class AccordionVariantViewModel @Inject constructor(
         // episode, so drop the panel instead.
         val currentUuid = playbackManager.getCurrentEpisode()?.uuid
         if (currentUuid == null || currentUuid != loadedEpisodeUuid) {
-            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: episode changed since variants loaded, hiding panel")
             hide()
             return
         }
@@ -149,7 +149,6 @@ class AccordionVariantViewModel @Inject constructor(
             if (!playbackManager.swapToVariantUrl(variant.url, variant.durationSeconds)) {
                 // Variant switching no longer applies to this episode (it finished downloading while
                 // the panel was open). Leaving the control up would silently do nothing on every drag.
-                LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion: variant swap was not applied, hiding panel")
                 hide()
             }
         }
