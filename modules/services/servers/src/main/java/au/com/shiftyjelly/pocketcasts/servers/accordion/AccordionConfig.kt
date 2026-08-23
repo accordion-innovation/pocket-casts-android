@@ -11,13 +11,17 @@ object AccordionConfig {
     const val BASE_URL = "https://www.accordion.live/"
 
     /**
-     * Developer API key sent as the `api_key` query parameter. Sourced from the `ACCORDION_API_KEY`
+     * Developer API key sent as the `X-Api-Key` header. Sourced from the `ACCORDION_API_KEY`
      * environment variable at build time (see `fastlane/env/user.env-example` and
      * `dependencies.gradle.kts`), surfaced through `BuildConfig` / [Settings]. Must match an active
      * row in the Supabase `ApiKeys` table, otherwise the Accordion API returns 401.
      *
-     * NOTE: api-key auth only works once the `verifyApiKey` service-role fix is deployed to
-     * accordion.live; until then the production API rejects `?api_key=` with 401.
+     * This is a build-time constant compiled into the APK, so it is extractable by anyone holding
+     * the app. Treat it as a public client identifier for attribution and rate limiting, never as
+     * an authorization secret: the server must not grant anything on the strength of the key alone.
+     *
+     * NOTE: requires the server to read the key from the `X-Api-Key` header, alongside the
+     * `verifyApiKey` service-role fix. Until both are deployed to accordion.live the API 401s.
      */
     const val API_KEY = Settings.ACCORDION_API_KEY
 }

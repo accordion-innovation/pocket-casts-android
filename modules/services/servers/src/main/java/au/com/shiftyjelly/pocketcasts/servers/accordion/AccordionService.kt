@@ -1,6 +1,7 @@
 package au.com.shiftyjelly.pocketcasts.servers.accordion
 
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -12,13 +13,15 @@ import retrofit2.http.Query
  *  - `podcastHash` path segment = md5(podcast RSS feed url)
  *  - `episode_title` query param = raw episode title; the server resolves the matching episode
  *
- * Authentication is via the `api_key` query parameter (see [AccordionConfig.API_KEY]).
+ * Authentication is via the `X-Api-Key` header (see [AccordionConfig.API_KEY]). It is deliberately
+ * not a query parameter: query strings are recorded verbatim by access logs, proxies and the debug
+ * build's OkHttp logging interceptor, which would spread the key well beyond the request.
  */
 interface AccordionService {
     @GET("api_v1/content/{podcastHash}/by-title")
     suspend fun getEpisodeByTitle(
         @Path("podcastHash") podcastHash: String,
         @Query("episode_title") episodeTitle: String,
-        @Query("api_key") apiKey: String,
+        @Header("X-Api-Key") apiKey: String,
     ): AccordionEpisodeResponse
 }
