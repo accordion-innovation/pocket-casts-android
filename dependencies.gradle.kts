@@ -120,6 +120,7 @@ project.apply {
         set("encryptionKey", secretProperties.getProperty("encryption_key", ""))
         set("appSecret", secretProperties.getProperty("app_secret", ""))
         set("metaAppId", secretProperties.getProperty("metaAppId", ""))
+        set("accordionApiKey", secretProperties.getProperty("accordionApiKey", ""))
         set("sentryAuthToken", secretProperties.getProperty("sentryAuthToken", ""))
         set("sentryOrg", secretProperties.getProperty("sentryOrg", ""))
         set("sentryAndroidProject", secretProperties.getProperty("sentryAndroidProject", ""))

@@ -218,6 +218,11 @@ open class PlaybackManager @Inject constructor(
     private var episodeLastBufferStatus: EpisodeBufferStatus? = null
     private var focusWasPlaying: Date? = null
     private var forcePlayerSwitch = false
+
+    // Accordion: optional override stream url + duration for an episode, set when the user picks an
+    // audio "variant" of the episode. Scoped to a single episode uuid so a stale override is never
+    // applied to a different episode. Applied in memory only — see onDurationAvailable.
+    private var accordionVariantOverride: AccordionVariantOverride? = null
     private var updateTimerDisposable: Disposable? = null
     private var bufferUpdateTimerDisposable: Disposable? = null
     private var pauseTimerDisposable: Disposable? = null
@@ -581,6 +586,44 @@ open class PlaybackManager @Inject constructor(
                 sourceView = sourceView,
             )
         }
+    }
+
+    /**
+     * Swap the currently-playing episode's audio to a different Accordion "variant" ([downloadUrl])
+     * and reload it in ExoPlayer, preserving the current playback position.
+     *
+     * Streaming only: a downloaded episode plays from its local file, so swapping its stream url is
+     * a no-op. Does nothing if no episode is currently loaded.
+     *
+     * @return true when the variant was applied, false when it could not be (nothing is playing, or
+     * the episode is downloaded so it has no stream url to swap). Callers driving UI should use this
+     * to avoid showing a variant as selected when the audio did not actually change.
+     */
+    suspend fun swapToVariantUrl(downloadUrl: String, durationSeconds: Long): Boolean {
+        val episode = upNextQueue.currentEpisode
+        if (episode == null) {
+            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Ignoring Accordion variant swap, nothing is playing")
+            return false
+        }
+        if (episode.isDownloaded) {
+            LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Ignoring Accordion variant swap for downloaded episode ${episode.uuid}")
+            return false
+        }
+        LogBuffer.i(LogBuffer.TAG_PLAYBACK, "Accordion variant swap for episode ${episode.uuid}")
+        accordionVariantOverride = AccordionVariantOverride(
+            episodeUuid = episode.uuid,
+            url = downloadUrl,
+            durationSeconds = durationSeconds,
+        )
+        // loadCurrentEpisode does blocking database work, so it must not run on the caller's thread
+        // (callers are typically UI scopes). Match the dispatcher the rest of this class launches on.
+        withContext(Dispatchers.Default) {
+            // Force the player to be recreated so ExoPlayer loads the new media source. loadCurrentEpisode
+            // captures and restores the current position when the episode is unchanged.
+            forcePlayerSwitch = true
+            loadCurrentEpisode(play = isPlaying())
+        }
+        return true
     }
 
     // Returning null means a source should not affect the auto play behavior. Listening history is not
@@ -1673,6 +1716,13 @@ open class PlaybackManager @Inject constructor(
             }
         }
 
+        // Accordion: while a variant is playing, the player's duration describes the variant rather
+        // than the episode. Persisting it would overwrite the episode's real duration in the database
+        // and sync that to the user's other devices, so leave the stored duration alone.
+        if (accordionVariantOverride?.episodeUuid == episode.uuid) {
+            return
+        }
+
         val playerDurationSecs = durationMs.toDouble() / 1000.0
         episodeManager.updateDurationBlocking(episode, playerDurationSecs, true)
     }
@@ -1926,6 +1976,26 @@ open class PlaybackManager @Inject constructor(
                         onPlayerError(PlayerEvent.PlayerError("Could not load cloud file ${e.message}"))
                         removeEpisode(episode, source = sourceView)
                         return
+                    }
+                }
+            }
+        }
+
+        // Accordion: if the user picked an audio variant for this episode, override the stream url
+        // and duration after the standard refresh above so ExoPlayer loads the selected variant.
+        // These writes are in-memory only; the database keeps the episode's real url and duration.
+        accordionVariantOverride?.let { override ->
+            when {
+                override.episodeUuid != episode.uuid -> {
+                    // Playback has moved on to a different episode, so the override is spent. Drop it
+                    // rather than letting it linger and reapply if the old episode comes back around.
+                    accordionVariantOverride = null
+                }
+
+                !episode.isDownloaded -> {
+                    episode.downloadUrl = override.url
+                    if (override.durationSeconds > 0L) {
+                        episode.duration = override.durationSeconds.toDouble()
                     }
                 }
             }
@@ -2706,6 +2776,19 @@ open class PlaybackManager @Inject constructor(
         OnUpdateSleepTimerStatus("updateSleepTimerStatus"),
         OnUserSeeking("onUserSeeking"),
     }
+
+    /**
+     * An Accordion audio "variant" the user selected in place of the episode's own audio.
+     *
+     * Applied to the in-memory episode when it is loaded into the player and deliberately never
+     * persisted: [url] and [durationSeconds] describe the variant, not the episode, so writing them
+     * back would corrupt the episode's real metadata and sync it to the user's other devices.
+     */
+    private data class AccordionVariantOverride(
+        val episodeUuid: String,
+        val url: String,
+        val durationSeconds: Long,
+    )
 }
 
 internal data class PrefetchRequest(
