@@ -120,9 +120,7 @@ project.apply {
         set("encryptionKey", secretProperties.getProperty("encryption_key", ""))
         set("appSecret", secretProperties.getProperty("app_secret", ""))
         set("metaAppId", secretProperties.getProperty("metaAppId", ""))
-        // Accordion API key: read from the ACCORDION_API_KEY env var (see fastlane/env/user.env-example),
-        // falling back to secret.properties, then empty.
-        set("accordionApiKey", System.getenv("ACCORDION_API_KEY") ?: secretProperties.getProperty("accordionApiKey", ""))
+        set("accordionApiKey", secretProperties.getProperty("accordionApiKey", ""))
         set("sentryAuthToken", secretProperties.getProperty("sentryAuthToken", ""))
         set("sentryOrg", secretProperties.getProperty("sentryOrg", ""))
         set("sentryAndroidProject", secretProperties.getProperty("sentryAndroidProject", ""))

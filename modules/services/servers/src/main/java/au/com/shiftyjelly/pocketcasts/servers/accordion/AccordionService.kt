@@ -1,5 +1,6 @@
 package au.com.shiftyjelly.pocketcasts.servers.accordion
 
+import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.Path
@@ -10,7 +11,8 @@ import retrofit2.http.Query
  *
  * Episodes are looked up by podcast + title because Pocket Casts does not store the RSS `<guid>`
  * that Accordion's `episode_hash` is derived from:
- *  - `podcastHash` path segment = md5(podcast RSS feed url)
+ *  - `podcastHash` path segment = md5(`Podcast.podcastUrl`), the podcast's website link as the
+ *    feed spells it in `<channel><link>`, hashed verbatim - Accordion hashes the same string
  *  - `episode_title` query param = raw episode title; the server resolves the matching episode
  *
  * Authentication is via the `X-Api-Key` header (see [AccordionConfig.API_KEY]). It is deliberately
@@ -23,5 +25,5 @@ interface AccordionService {
         @Path("podcastHash") podcastHash: String,
         @Query("episode_title") episodeTitle: String,
         @Header("X-Api-Key") apiKey: String,
-    ): AccordionEpisodeResponse
+    ): Response<AccordionEpisodeResponse>
 }

@@ -1,9 +1,13 @@
 package au.com.shiftyjelly.pocketcasts.servers.accordion
 
 import kotlinx.coroutines.test.runTest
+import okhttp3.Protocol
+import okhttp3.Request
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import retrofit2.Response
 
 class AccordionManagerTest {
     @Test
@@ -64,7 +68,50 @@ class AccordionManagerTest {
     @Test
     fun `returns nothing when the response has no audio files`() = runTest {
         assertTrue(variantsFor().isEmpty())
-        assertTrue(AccordionManager(FakeService(AccordionEpisodeResponse())).getVariants(HASH, TITLE).isEmpty())
+        assertTrue(managerFor(AccordionEpisodeResponse()).getVariants(HASH, TITLE).isEmpty())
+    }
+
+    @Test
+    fun `fails with a message naming the missing api key`() = runTest {
+        val manager = AccordionManager(FakeService(Response.success(AccordionEpisodeResponse())), apiKey = "")
+
+        val error = runCatching { manager.getVariants(HASH, TITLE) }.exceptionOrNull()
+
+        assertTrue(error is AccordionException)
+        assertTrue(error!!.message!!.contains("ACCORDION_API_KEY"))
+    }
+
+    @Test
+    fun `reports an auth redirect rather than a parse error`() = runTest {
+        // accordion.live answers an unauthenticated content request with a 303 to its HTML login
+        // page. The failure has to name that, not surface as malformed JSON.
+        val redirect = Response.error<AccordionEpisodeResponse>(
+            "".toResponseBody(null),
+            okhttp3.Response.Builder()
+                .code(303)
+                .message("See Other")
+                .header("Location", "/direct-login")
+                .protocol(Protocol.HTTP_1_1)
+                .request(Request.Builder().url("https://www.accordion.live/api_v1/content/$HASH/by-title").build())
+                .build(),
+        )
+
+        val error = runCatching { AccordionManager(FakeService(redirect), API_KEY).getVariants(HASH, TITLE) }
+            .exceptionOrNull()
+
+        assertTrue(error is AccordionException)
+        assertTrue(error!!.message!!.contains("/direct-login"))
+    }
+
+    @Test
+    fun `reports a rejected api key`() = runTest {
+        val unauthorized = Response.error<AccordionEpisodeResponse>(401, "".toResponseBody(null))
+
+        val error = runCatching { AccordionManager(FakeService(unauthorized), API_KEY).getVariants(HASH, TITLE) }
+            .exceptionOrNull()
+
+        assertTrue(error is AccordionException)
+        assertTrue(error!!.message!!.contains("rejected the API key"))
     }
 
     private suspend fun variantsFor(vararg audioFiles: AccordionAudioFile): List<AccordionVariant> {
@@ -74,12 +121,15 @@ class AccordionManagerTest {
                 episode = AccordionEpisodeData(title = TITLE, audioFiles = audioFiles.toList()),
             ),
         )
-        return AccordionManager(FakeService(response)).getVariants(HASH, TITLE)
+        return managerFor(response).getVariants(HASH, TITLE)
     }
+
+    private fun managerFor(response: AccordionEpisodeResponse) =
+        AccordionManager(FakeService(Response.success(response)), API_KEY)
 
     private fun audioFile(url: String?, durationSeconds: Double?) = AccordionAudioFile(url, durationSeconds)
 
-    private class FakeService(private val response: AccordionEpisodeResponse) : AccordionService {
+    private class FakeService(private val response: Response<AccordionEpisodeResponse>) : AccordionService {
         override suspend fun getEpisodeByTitle(
             podcastHash: String,
             episodeTitle: String,
@@ -90,5 +140,6 @@ class AccordionManagerTest {
     companion object {
         private const val HASH = "9e107d9d372bb6826bd81d3542a419d6"
         private const val TITLE = "Episode 1"
+        private const val API_KEY = "test-api-key"
     }
 }

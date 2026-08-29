@@ -25,6 +25,12 @@ import au.com.shiftyjelly.pocketcasts.player.viewmodel.AccordionVariantViewModel
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.AccordionVariantViewModel.UiState
 import kotlin.math.roundToInt
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 
 /**
  * Panel shown in the playback effects sheet that lets the user switch between the available
@@ -69,41 +75,67 @@ private fun AccordionVariantContent(
             val variants = state.variants
             Column(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 PanelTitle()
-                Slider(
-                    value = state.selectedIndex.toFloat(),
-                    onValueChange = { value ->
-                        onVariantSelect(value.roundToInt().coerceIn(0, variants.lastIndex))
-                    },
-                    valueRange = 0f..variants.lastIndex.toFloat(),
-                    steps = (variants.size - 2).coerceAtLeast(0),
-                    colors = SliderDefaults.colors(
-                        thumbColor = MaterialTheme.theme.colors.playerContrast01,
-                        activeTrackColor = MaterialTheme.theme.colors.playerContrast01,
-                        inactiveTrackColor = MaterialTheme.theme.colors.playerContrast05,
-                        activeTickColor = MaterialTheme.theme.colors.playerContrast02,
-                        inactiveTickColor = MaterialTheme.theme.colors.playerContrast05,
-                    ),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                ) {
+                    // Dot markers, one per variant, sitting above the slider track.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.Center)
+                            .padding(horizontal = 10.dp), // approximates the Slider's thumb inset
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        variants.forEachIndexed { index, _ ->
+                            val selected = index == state.selectedIndex
+                            Box(
+                                modifier = Modifier
+                                    .size(if (selected) 14.dp else 10.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (selected) {
+                                            MaterialTheme.theme.colors.playerContrast01
+                                        } else {
+                                            MaterialTheme.theme.colors.playerContrast04
+                                        },
+                                    )
+                                    .clickable { onVariantSelect(index) },
+                            )
+                        }
+                    }
+                    Slider(
+                        value = state.selectedIndex.toFloat(),
+                        onValueChange = { value ->
+                            onVariantSelect(value.roundToInt().coerceIn(0, variants.lastIndex))
+                        },
+                        valueRange = 0f..variants.lastIndex.toFloat(),
+                        steps = (variants.size - 2).coerceAtLeast(0),
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.theme.colors.playerContrast01,
+                            activeTrackColor = MaterialTheme.theme.colors.playerContrast01,
+                            inactiveTrackColor = MaterialTheme.theme.colors.playerContrast05,
+                            activeTickColor = androidx.compose.ui.graphics.Color.Transparent,
+                            inactiveTickColor = androidx.compose.ui.graphics.Color.Transparent,
+                        ),
+                        modifier = Modifier.fillMaxWidth().align(Alignment.Center),
+                    )
+                }
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    variants.forEachIndexed { index, variant ->
-                        val selected = index == state.selectedIndex
-                        Text(
-                            text = variantLabel(index, variant.durationSeconds),
-                            style = MaterialTheme.typography.caption,
-                            textAlign = TextAlign.Center,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selected) {
-                                MaterialTheme.theme.colors.playerContrast01
-                            } else {
-                                MaterialTheme.theme.colors.playerContrast02
-                            },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                    Text(
+                        text = variantLabel(0, variants.first().durationSeconds),
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.theme.colors.playerContrast02,
+                    )
+                    Text(
+                        text = variantLabel(variants.lastIndex, variants.last().durationSeconds),
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.theme.colors.playerContrast02,
+                    )
                 }
             }
         }

@@ -22,10 +22,13 @@ import kotlinx.coroutines.launch
  * Loads the available Accordion audio "variants" for the currently-playing episode and swaps the
  * player to a different variant when the user selects one.
  *
- * The episode is identified to the Accordion API by podcast + title (feed+title lookup):
- * `podcast_hash` = md5(podcast RSS feed url) and the raw `episode_title`. Pocket Casts does not
+ * The episode is identified to the Accordion API by podcast + title (link+title lookup):
+ * `podcast_hash` = md5(`Podcast.podcastUrl`) and the raw `episode_title`. Pocket Casts does not
  * store the RSS `<guid>` that Accordion's `episode_hash` is derived from, so the server resolves
  * the episode by title within the podcast instead.
+ *
+ * Note `podcastUrl` is the podcast's website link (the feed's `<channel><link>`), not the feed
+ * url; it is hashed verbatim, with no normalisation, because Accordion hashes the same string.
  */
 @HiltViewModel
 class AccordionVariantViewModel @Inject constructor(
@@ -54,10 +57,10 @@ class AccordionVariantViewModel @Inject constructor(
     /** Uuid of the episode [uiState]'s variants belong to, so a stale panel is never acted on. */
     private var loadedEpisodeUuid: String? = null
 
+    private var isApplyingVariant = false
+
     /**
-     * Fetch the variants for whatever episode is currently loaded in the player. Safe to call on
-     * every playback change: it is a no-op while already showing the current episode's variants, so
-     * the user's selection survives unrelated updates.
+     * Fetch the variants for whatever episode is currently loaded in the player.
      */
     fun loadVariantsForCurrentEpisode() {
         // Looking an episode up tells accordion.live what the user is listening to, so nothing is
@@ -66,6 +69,10 @@ class AccordionVariantViewModel @Inject constructor(
             hide()
             return
         }
+        // swapToVariantUrl recreates the player, which re-fires the playback observer that calls this
+        // function. Ignore that transient re-entry instead of treating a momentarily-null/changed
+        // currentEpisode as a real playback change.
+        if (isApplyingVariant) return
         val episode = playbackManager.getCurrentEpisode() as? PodcastEpisode
         if (episode == null) {
             hide()
@@ -89,6 +96,12 @@ class AccordionVariantViewModel @Inject constructor(
                 // private or premium feed, and LogBuffer ends up in the debug log users attach to
                 // support emails.
                 val podcastHash = podcast?.podcastUrl?.takeIf { it.isNotBlank() }?.md5()
+                LogBuffer.i(
+                    LogBuffer.TAG_PLAYBACK,
+                    "Accordion: podcastUrl='%s' -> hash=%s",
+                    podcast?.podcastUrl ?: "null",
+                    podcastHash ?: "null",
+                )
                 val episodeTitle = episode.title.takeIf { it.isNotBlank() }
                 if (podcastHash == null || episodeTitle == null) {
                     emptyList()
@@ -121,8 +134,13 @@ class AccordionVariantViewModel @Inject constructor(
             _uiState.value = UiState.Loaded(variants = variants, selectedIndex = longestIndex)
 
             val longestVariant = variants[longestIndex]
-            if (!playbackManager.swapToVariantUrl(longestVariant.url, longestVariant.durationSeconds)) {
-                hide()
+            isApplyingVariant = true
+            try {
+                if (!playbackManager.swapToVariantUrl(longestVariant.url, longestVariant.durationSeconds)) {
+                    hide()
+                }
+            } finally {
+                isApplyingVariant = false
             }
         }
     }
@@ -146,10 +164,13 @@ class AccordionVariantViewModel @Inject constructor(
         // the player could not actually apply it.
         _uiState.value = state.copy(selectedIndex = index)
         viewModelScope.launch {
-            if (!playbackManager.swapToVariantUrl(variant.url, variant.durationSeconds)) {
-                // Variant switching no longer applies to this episode (it finished downloading while
-                // the panel was open). Leaving the control up would silently do nothing on every drag.
-                hide()
+            isApplyingVariant = true
+            try {
+                if (!playbackManager.swapToVariantUrl(variant.url, variant.durationSeconds)) {
+                    hide()
+                }
+            } finally {
+                isApplyingVariant = false
             }
         }
     }

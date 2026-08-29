@@ -12,6 +12,7 @@ import au.com.shiftyjelly.pocketcasts.preferences.AccessToken
 import au.com.shiftyjelly.pocketcasts.preferences.RefreshToken
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.servers.OkHttpInterceptor
+import au.com.shiftyjelly.pocketcasts.servers.accordion.AccordionApiKey
 import au.com.shiftyjelly.pocketcasts.servers.accordion.AccordionConfig
 import au.com.shiftyjelly.pocketcasts.servers.accordion.AccordionService
 import au.com.shiftyjelly.pocketcasts.servers.adapters.ExecutorEnqueueAdapterFactory
@@ -447,15 +448,29 @@ class NetworkModule {
         builder: Retrofit.Builder,
         @NoCache httpClient: Lazy<OkHttpClient>,
     ): Retrofit {
+        // accordion.live answers an unauthenticated content request with a 303 to its HTML
+        // /direct-login page. Following that redirect turns an auth failure into a Moshi
+        // "malformed JSON" error on the login page's markup, which says nothing about the real
+        // cause. Leave the 303 unfollowed so AccordionManager can report it as what it is.
+        val accordionClient = lazy {
+            httpClient.get().newBuilder()
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .build()
+        }
         return builder
             .baseUrl(AccordionConfig.BASE_URL)
-            .callFactory { request -> httpClient.get().newCall(request) }
+            .callFactory { request -> accordionClient.value.newCall(request) }
             .build()
     }
 
     @Provides
     @Singleton
     fun provideAccordionService(@AccordionServiceRetrofit retrofit: Retrofit): AccordionService = retrofit.create()
+
+    @Provides
+    @AccordionApiKey
+    fun provideAccordionApiKey(): String = AccordionConfig.API_KEY
 }
 
 @Qualifier
