@@ -52,6 +52,7 @@ interface Settings {
         const val SERVER_LIST_HOST = BuildConfig.SERVER_LIST_HOST
         const val SEARCH_API_URL = BuildConfig.SEARCH_API_URL
         const val WEB_FEEDS_API_URL = BuildConfig.WEB_FEEDS_API_URL
+        const val ACCORDION_API_KEY = BuildConfig.ACCORDION_API_KEY
 
         const val WP_COM_API_URL = "https://public-api.wordpress.com"
 

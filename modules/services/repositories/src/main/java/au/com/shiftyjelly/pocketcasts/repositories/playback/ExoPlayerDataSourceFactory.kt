@@ -67,6 +67,14 @@ class ExoPlayerDataSourceFactory @Inject constructor(
         onCachingComplete: (String) -> Unit = {},
     ): MediaSource? {
         val episodeUri = episodeLocation.uri ?: return null
+        // Accordion variants are different audio sharing one episode uuid, so the url path has to
+        // be part of the key. Keeping the plain uuid key otherwise means enabling the feature never
+        // invalidates a user's existing cache. See `docs/accordion.md`.
+        val cacheKey = if (FeatureFlag.isEnabled(Feature.ACCORDION_AUDIO_VARIANTS)) {
+            "${episodeLocation.episode.uuid}|${episodeUri.substringBefore("?")}"
+        } else {
+            episodeLocation.episode.uuid
+        }
         val mediaItem = MediaItem.Builder()
             .setUri(episodeUri)
             .let { builder ->
@@ -76,7 +84,7 @@ class ExoPlayerDataSourceFactory @Inject constructor(
                     builder
                 }
             }
-            .setCustomCacheKey(episodeLocation.episode.uuid)
+            .setCustomCacheKey(cacheKey)
             .build()
 
         val extractorsFactory = DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true)

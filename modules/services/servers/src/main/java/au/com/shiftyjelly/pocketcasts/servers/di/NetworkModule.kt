@@ -12,6 +12,9 @@ import au.com.shiftyjelly.pocketcasts.preferences.AccessToken
 import au.com.shiftyjelly.pocketcasts.preferences.RefreshToken
 import au.com.shiftyjelly.pocketcasts.preferences.Settings
 import au.com.shiftyjelly.pocketcasts.servers.OkHttpInterceptor
+import au.com.shiftyjelly.pocketcasts.servers.accordion.AccordionApiKey
+import au.com.shiftyjelly.pocketcasts.servers.accordion.AccordionConfig
+import au.com.shiftyjelly.pocketcasts.servers.accordion.AccordionService
 import au.com.shiftyjelly.pocketcasts.servers.adapters.ExecutorEnqueueAdapterFactory
 import au.com.shiftyjelly.pocketcasts.servers.adapters.InstantAdapter
 import au.com.shiftyjelly.pocketcasts.servers.addInterceptors
@@ -437,7 +440,40 @@ class NetworkModule {
     @Provides
     @Singleton
     fun provideAnalyticsLiveService(@AnalyticsLiveRetrofit retrofit: Retrofit): AnalyticsLiveService = retrofit.create()
+
+    @Provides
+    @AccordionServiceRetrofit
+    @Singleton
+    fun provideAccordionRetrofit(
+        builder: Retrofit.Builder,
+        @NoCache httpClient: Lazy<OkHttpClient>,
+    ): Retrofit {
+        // Redirects are left unfollowed so an auth 303 to accordion.live's HTML login page reaches
+        // AccordionManager as a redirect rather than a JSON parse error. See `docs/accordion.md`.
+        val accordionClient = lazy {
+            httpClient.get().newBuilder()
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .build()
+        }
+        return builder
+            .baseUrl(AccordionConfig.BASE_URL)
+            .callFactory { request -> accordionClient.value.newCall(request) }
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAccordionService(@AccordionServiceRetrofit retrofit: Retrofit): AccordionService = retrofit.create()
+
+    @Provides
+    @AccordionApiKey
+    fun provideAccordionApiKey(): String = AccordionConfig.API_KEY
 }
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class AccordionServiceRetrofit
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)

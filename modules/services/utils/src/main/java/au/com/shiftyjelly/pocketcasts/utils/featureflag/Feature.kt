@@ -369,6 +369,15 @@ enum class Feature(
         hasDevToggle = true,
         addedOn = LocalDate.parse("2026-06-11"),
     ),
+    ACCORDION_AUDIO_VARIANTS(
+        key = "accordion_audio_variants",
+        title = "Switch between Accordion audio variants of an episode",
+        defaultValue = isDebugOrPrototypeBuild,
+        tier = FeatureTier.Free,
+        hasFirebaseRemoteFlag = true,
+        hasDevToggle = true,
+        addedOn = LocalDate.parse("2026-08-23"),
+    ),
 }
 
 sealed class FeatureTier {

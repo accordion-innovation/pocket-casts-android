@@ -76,6 +76,7 @@ Read our [Contributing Guide](CONTRIBUTING.md) to learn about reporting issues, 
 - [Coding Style](docs/coding-style.md) - guidelines and validation and auto-formatting tools
 - [Pull Request Guidelines](docs/pull-request-guidelines.md) - branch naming and how to write good pull requests
 - [Translations](docs/translations.md) - how the app gets translated and how to contribute translations
+- [Accordion Audio Variants](docs/accordion.md) - the Accordion integration that lets listeners switch between cuts of an episode
 
 ## Signing a Release
 

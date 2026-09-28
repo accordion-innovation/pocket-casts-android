@@ -279,6 +279,7 @@ subprojects {
                 buildConfigField("String", "ENCRYPTION_KEY", "\"${project.property("encryptionKey")}\"")
                 buildConfigField("String", "APP_SECRET", "\"${project.property("appSecret")}\"")
                 buildConfigField("String", "META_APP_ID", "\"${project.property("metaAppId")}\"")
+                buildConfigField("String", "ACCORDION_API_KEY", "\"${project.property("accordionApiKey")}\"")
 
                 buildConfigField("String", "SERVER_MAIN_URL", "\"https://refresh.pocketcasts.com\"")
                 buildConfigField("String", "SERVER_API_URL", "\"https://api.pocketcasts.com\"")

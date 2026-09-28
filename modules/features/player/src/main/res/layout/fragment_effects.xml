@@ -260,6 +260,16 @@
                 app:layout_constraintLeft_toLeftOf="@id/trimSilenceLabel"
                 app:layout_constraintTop_toBottomOf="@id/volumeLabel" />
 
+            <!-- Accordion audio variant selector (hidden unless the episode has 2+ variants). -->
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/accordionVariantPanel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/detailVolumeLabel" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
     </androidx.core.widget.NestedScrollView>
 </FrameLayout>
