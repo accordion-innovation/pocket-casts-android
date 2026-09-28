@@ -5,7 +5,10 @@ import javax.inject.Singleton
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
- * Fetches the available audio [AccordionVariant]s for an episode from the Accordion API.
+ * Fetches the available audio [AccordionVariant]s for an episode.
+ *
+ * Variants this app cannot safely play are dropped here rather than further down, so nothing
+ * unvalidated reaches the player. See `docs/accordion.md`.
  */
 @Singleton
 class AccordionManager @Inject constructor(
@@ -13,18 +16,13 @@ class AccordionManager @Inject constructor(
     @AccordionApiKey private val apiKey: String,
 ) {
     /**
-     * Returns the audio variants for the episode identified by [podcastHash] (md5 of the podcast's
-     * website link, i.e. `Podcast.podcastUrl`) and [episodeTitle]. Returns an empty list if the
-     * episode has no variants. Throws if the network call fails so the caller can surface or
-     * swallow the error as appropriate.
-     *
-     * Variants the API returns that this app cannot safely play are dropped here rather than
-     * further down, so nothing unvalidated ever reaches the player or the episode.
+     * Returns the audio variants for the episode identified by [podcastHash] and [episodeTitle], or
+     * an empty list if it has none. Throws [AccordionException] if the lookup fails, so the caller
+     * can surface or swallow the error as appropriate.
      */
     suspend fun getVariants(podcastHash: String, episodeTitle: String): List<AccordionVariant> {
-        // An empty key is a build-configuration mistake, not a network condition: the request is
-        // guaranteed to be rejected, so fail with a message that names the actual problem instead of
-        // letting it surface as an opaque auth redirect.
+        // A build-configuration mistake, not a network condition: the request is guaranteed to be
+        // rejected, so fail with a message naming the actual problem.
         if (apiKey.isBlank()) {
             throw AccordionException(
                 "No Accordion API key in this build. Set the ACCORDION_API_KEY env var or the " +
@@ -44,18 +42,15 @@ class AccordionManager @Inject constructor(
 
         return body.podcast?.episode?.audioFiles.orEmpty()
             .asSequence()
-            .mapNotNull { audioFile -> audioFile.toVariantOrNull() }
+            .mapNotNull { it.toVariantOrNull() }
             .take(MAX_VARIANTS)
             .toList()
     }
 
+    /** https only: the player resolves `file://`, `content://` and `asset://` just as readily. */
     private fun AccordionAudioFile.toVariantOrNull(): AccordionVariant? {
-        // This url is handed to ExoPlayer and written onto the playing episode, and the player's
-        // DefaultDataSource resolves file://, content:// and asset:// just as readily as http. Only
-        // accept https so a tampered or compromised response cannot aim the player at local storage
-        // or at a cleartext connection.
-        val url = url?.toHttpUrlOrNull()?.takeIf { it.isHttps }?.toString() ?: return null
-        return AccordionVariant(url = url, durationSeconds = sanitizedDurationSeconds())
+        val httpsUrl = url?.toHttpUrlOrNull()?.takeIf { it.isHttps } ?: return null
+        return AccordionVariant(url = httpsUrl.toString(), durationSeconds = sanitizedDurationSeconds())
     }
 
     /** 0 when the API omits a duration or reports one that cannot describe an episode. */
@@ -65,22 +60,18 @@ class AccordionManager @Inject constructor(
         return if (isPlausible) seconds.toLong() else 0L
     }
 
-    /**
-     * Turns a non-2xx into a message that identifies the cause. The redirect case is called out
-     * specifically: accordion.live sends a 303 to `/direct-login` for any content request it does
-     * not consider authenticated, which is the symptom of a rejected or unsupported API key rather
-     * than of a missing episode.
-     */
-    private fun describeFailure(code: Int, location: String?): String = when {
-        code == 303 || code == 302 || code == 301 -> {
+    private fun describeFailure(code: Int, location: String?): String = when (code) {
+        // accordion.live redirects to its HTML login page for anything it does not consider
+        // authenticated, so this means a rejected key rather than a missing episode.
+        301, 302, 303 -> {
             "Accordion API redirected to $location (HTTP $code) instead of returning JSON. The " +
                 "request was not accepted as authenticated - check that the API key is valid and " +
                 "that the server reads it from the X-Api-Key header."
         }
 
-        code == 401 || code == 403 -> "Accordion API rejected the API key (HTTP $code)"
+        401, 403 -> "Accordion API rejected the API key (HTTP $code)"
 
-        code == 404 -> {
+        404 -> {
             "Accordion API has no such route or episode (HTTP 404). Confirm the deployed server " +
                 "exposes the api_v1/content/{podcastHash}/by-title lookup."
         }

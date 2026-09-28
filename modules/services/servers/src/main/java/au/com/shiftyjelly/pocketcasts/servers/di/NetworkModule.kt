@@ -448,10 +448,8 @@ class NetworkModule {
         builder: Retrofit.Builder,
         @NoCache httpClient: Lazy<OkHttpClient>,
     ): Retrofit {
-        // accordion.live answers an unauthenticated content request with a 303 to its HTML
-        // /direct-login page. Following that redirect turns an auth failure into a Moshi
-        // "malformed JSON" error on the login page's markup, which says nothing about the real
-        // cause. Leave the 303 unfollowed so AccordionManager can report it as what it is.
+        // Redirects are left unfollowed so an auth 303 to accordion.live's HTML login page reaches
+        // AccordionManager as a redirect rather than a JSON parse error. See `docs/accordion.md`.
         val accordionClient = lazy {
             httpClient.get().newBuilder()
                 .followRedirects(false)

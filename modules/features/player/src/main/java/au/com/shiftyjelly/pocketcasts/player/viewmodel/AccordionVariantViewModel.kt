@@ -19,16 +19,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Loads the available Accordion audio "variants" for the currently-playing episode and swaps the
- * player to a different variant when the user selects one.
+ * Loads the Accordion audio variants for the currently-playing episode and swaps the player to a
+ * different variant when the user selects one.
  *
- * The episode is identified to the Accordion API by podcast + title (link+title lookup):
- * `podcast_hash` = md5(`Podcast.podcastUrl`) and the raw `episode_title`. Pocket Casts does not
- * store the RSS `<guid>` that Accordion's `episode_hash` is derived from, so the server resolves
- * the episode by title within the podcast instead.
- *
- * Note `podcastUrl` is the podcast's website link (the feed's `<channel><link>`), not the feed
- * url; it is hashed verbatim, with no normalisation, because Accordion hashes the same string.
+ * See `docs/accordion.md` for how episodes are identified and why showing the panel deliberately
+ * leaves the player alone.
  */
 @HiltViewModel
 class AccordionVariantViewModel @Inject constructor(
@@ -38,13 +33,10 @@ class AccordionVariantViewModel @Inject constructor(
 ) : ViewModel() {
 
     sealed interface UiState {
-        /** No variants to show (single variant, no episode, or failed to load): panel stays hidden. */
         data object Hidden : UiState
 
-        /** Fetching variants from the Accordion API. */
         data object Loading : UiState
 
-        /** Two or more variants are available. */
         data class Loaded(
             val variants: List<AccordionVariant>,
             val selectedIndex: Int,
@@ -59,80 +51,35 @@ class AccordionVariantViewModel @Inject constructor(
 
     private var isApplyingVariant = false
 
-    /**
-     * Fetch the variants for whatever episode is currently loaded in the player.
-     */
+    /** Fetch the variants for whatever episode is currently loaded in the player. */
     fun loadVariantsForCurrentEpisode() {
-        // Looking an episode up tells accordion.live what the user is listening to, so nothing is
-        // requested unless the feature is switched on for this install.
-        if (!FeatureFlag.isEnabled(Feature.ACCORDION_AUDIO_VARIANTS)) {
-            hide()
-            return
-        }
-        // swapToVariantUrl recreates the player, which re-fires the playback observer that calls this
-        // function. Ignore that transient re-entry instead of treating a momentarily-null/changed
-        // currentEpisode as a real playback change.
+        // Swapping recreates the player, which re-fires the observer that calls this. Ignore that
+        // transient re-entry rather than reading it as a real playback change.
         if (isApplyingVariant) return
-        val episode = playbackManager.getCurrentEpisode() as? PodcastEpisode
+
+        val episode = currentSwappableEpisode()
         if (episode == null) {
             hide()
             return
         }
-        // A downloaded episode plays from its local file, so the player cannot swap its stream url.
-        // Don't offer a choice that can't be applied (and don't spend a request discovering it).
-        if (episode.isDownloaded) {
-            hide()
-            return
-        }
-        if (episode.uuid == loadedEpisodeUuid) {
-            return
-        }
+        if (episode.uuid == loadedEpisodeUuid) return
+
         loadedEpisodeUuid = episode.uuid
         _uiState.value = UiState.Loading
         viewModelScope.launch {
-            val variants = try {
-                val podcast = podcastManager.findPodcastByUuid(episode.podcastUuid)
-                val podcastHash = podcast?.podcastUrl?.takeIf { it.isNotBlank() }?.md5()
-                // Log the hash, never podcastUrl itself. A podcast url can carry a per-user access
-                // token for a private or premium feed, and LogBuffer ends up in the debug log users
-                // attach to support emails.
-                LogBuffer.i(
-                    LogBuffer.TAG_PLAYBACK,
-                    "Accordion: looking up variants for podcast hash=%s",
-                    podcastHash ?: "null",
-                )
-                val episodeTitle = episode.title.takeIf { it.isNotBlank() }
-                if (podcastHash == null || episodeTitle == null) {
-                    emptyList()
-                } else {
-                    accordionManager.getVariants(podcastHash = podcastHash, episodeTitle = episodeTitle)
-                }
-            } catch (e: Exception) {
-                LogBuffer.e(LogBuffer.TAG_PLAYBACK, e, "Accordion: failed to load variants")
-                emptyList()
-            }
+            val variants = fetchVariants(episode)
 
-            // The episode may have changed while this request was in flight; a late response must not
-            // replace the panel belonging to whatever is playing now.
-            if (loadedEpisodeUuid != episode.uuid) {
-                return@launch
-            }
+            // A response that arrives after the episode changed must not replace the panel
+            // belonging to whatever is playing now.
+            if (loadedEpisodeUuid != episode.uuid) return@launch
 
-            // Only show the panel when there is an actual choice to make. Keep loadedEpisodeUuid set
-            // so this stays resolved for the episode and we don't re-request on every playback change.
-            if (variants.size < 2) {
-                _uiState.value = UiState.Hidden
-                return@launch
+            _uiState.value = if (variants.size < 2) {
+                // Nothing to choose between. Keep loadedEpisodeUuid set so this stays resolved and
+                // we don't re-request on every playback change.
+                UiState.Hidden
+            } else {
+                UiState.Loaded(variants = variants, selectedIndex = indexOfLongest(variants))
             }
-
-            // Pre-select the longest variant because it is the closest match to the full RSS audio
-            // already playing, so the panel opens showing roughly what the user is hearing.
-            //
-            // Showing the panel deliberately does not touch the player: swapping recreates
-            // ExoPlayer and reloads the stream, which is far too disruptive to do just because
-            // someone opened the effects sheet. The player only changes once a variant is picked.
-            val longestIndex = variants.indices.maxByOrNull { variants[it].durationSeconds } ?: 0
-            _uiState.value = UiState.Loaded(variants = variants, selectedIndex = longestIndex)
         }
     }
 
@@ -142,29 +89,59 @@ class AccordionVariantViewModel @Inject constructor(
         if (index == state.selectedIndex) return
         val variant = state.variants.getOrNull(index) ?: return
 
-        // The player applies the swap to whatever is playing now. If that is no longer the episode
-        // these variants were loaded for, applying one would put the wrong audio on the wrong
-        // episode, so drop the panel instead.
-        val currentUuid = playbackManager.getCurrentEpisode()?.uuid
-        if (currentUuid == null || currentUuid != loadedEpisodeUuid) {
+        // The swap applies to whatever is playing now, so if that is no longer the episode these
+        // variants belong to, applying one would put the wrong audio on the wrong episode.
+        if (playbackManager.getCurrentEpisode()?.uuid != loadedEpisodeUuid) {
             hide()
             return
         }
 
-        // Move the selection straight away so the control feels responsive, then reconcile below if
-        // the player could not actually apply it.
+        // Move the selection straight away so the control feels responsive, then reconcile if the
+        // player could not actually apply it.
         _uiState.value = state.copy(selectedIndex = index)
         viewModelScope.launch {
             isApplyingVariant = true
-            try {
-                if (!playbackManager.swapToVariantUrl(variant.url, variant.durationSeconds)) {
-                    hide()
-                }
+            val applied = try {
+                playbackManager.swapToVariantUrl(variant.url, variant.durationSeconds)
             } finally {
                 isApplyingVariant = false
             }
+            if (!applied) hide()
         }
     }
+
+    /**
+     * The playing episode when a variant could actually be applied to it, otherwise null.
+     *
+     * A downloaded episode plays from its local file and has no stream url to swap, so don't offer
+     * a choice that cannot be applied, and don't spend a request discovering that.
+     */
+    private fun currentSwappableEpisode(): PodcastEpisode? {
+        if (!FeatureFlag.isEnabled(Feature.ACCORDION_AUDIO_VARIANTS)) return null
+        return (playbackManager.getCurrentEpisode() as? PodcastEpisode)?.takeUnless { it.isDownloaded }
+    }
+
+    private suspend fun fetchVariants(episode: PodcastEpisode): List<AccordionVariant> = try {
+        val podcastHash = podcastManager.findPodcastByUuid(episode.podcastUuid)
+            ?.podcastUrl
+            ?.takeIf { it.isNotBlank() }
+            ?.md5()
+        val episodeTitle = episode.title.takeIf { it.isNotBlank() }
+        if (podcastHash == null || episodeTitle == null) {
+            emptyList()
+        } else {
+            accordionManager.getVariants(podcastHash = podcastHash, episodeTitle = episodeTitle)
+        }
+    } catch (e: Exception) {
+        LogBuffer.e(LogBuffer.TAG_PLAYBACK, e, "Accordion: failed to load variants")
+        emptyList()
+    }
+
+    /**
+     * The longest variant is the closest match to the full RSS audio already playing, so the panel
+     * opens showing roughly what the user is hearing.
+     */
+    private fun indexOfLongest(variants: List<AccordionVariant>) = variants.indices.maxByOrNull { variants[it].durationSeconds } ?: 0
 
     /** Hide the panel and forget the episode, so the next load re-evaluates from scratch. */
     private fun hide() {

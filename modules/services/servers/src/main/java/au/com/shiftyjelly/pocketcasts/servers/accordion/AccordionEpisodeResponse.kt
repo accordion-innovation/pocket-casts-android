@@ -4,16 +4,14 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 /**
- * Response from the Accordion content API. Mirrors the JSON shape already published for Accordion
- * episodes, e.g. `/api_v1/content/{podcastHash}/{episodeHash}`:
+ * Response from the Accordion content API:
  *
  * ```
  * { "podcast": { "title": "...", "episode": { "title": "...", "audioFiles": [ { "url": "...",
  *   "durationSeconds": 1234 } ] } } }
  * ```
  *
- * The `audioFiles` array is the list of audio "variants" (different lengths/edits of the same
- * episode) that the user can switch between.
+ * `audioFiles` is the list of variants — different lengths or edits of the same episode.
  */
 @JsonClass(generateAdapter = true)
 data class AccordionEpisodeResponse(

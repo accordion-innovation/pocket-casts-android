@@ -67,11 +67,9 @@ class ExoPlayerDataSourceFactory @Inject constructor(
         onCachingComplete: (String) -> Unit = {},
     ): MediaSource? {
         val episodeUri = episodeLocation.uri ?: return null
-        // Episodes are normally cached under their uuid alone, so a refreshed signed url for the same
-        // audio still hits the existing entry. Accordion variants are *different* audio sharing one
-        // uuid, so when that feature is live the url path (stable across signed-url refreshes, but
-        // different per variant) has to be part of the key. Keep the plain uuid key otherwise, so
-        // enabling this never invalidates a user's whole cache.
+        // Accordion variants are different audio sharing one episode uuid, so the url path has to
+        // be part of the key. Keeping the plain uuid key otherwise means enabling the feature never
+        // invalidates a user's existing cache. See `docs/accordion.md`.
         val cacheKey = if (FeatureFlag.isEnabled(Feature.ACCORDION_AUDIO_VARIANTS)) {
             "${episodeLocation.episode.uuid}|${episodeUri.substringBefore("?")}"
         } else {

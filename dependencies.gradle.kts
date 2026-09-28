@@ -120,9 +120,8 @@ project.apply {
         set("encryptionKey", secretProperties.getProperty("encryption_key", ""))
         set("appSecret", secretProperties.getProperty("app_secret", ""))
         set("metaAppId", secretProperties.getProperty("metaAppId", ""))
-        // Env var first so CI can inject the key without writing a secret.properties, then the
-        // local secret.properties, then empty. An empty key is not a build failure: the Accordion
-        // feature simply stays hidden, so the app still builds without any Accordion credentials.
+        // Env var first so CI can inject the key without writing a secret.properties. Empty is not
+        // a build failure; the Accordion panel just stays hidden. See docs/accordion.md.
         set(
             "accordionApiKey",
             System.getenv("ACCORDION_API_KEY")?.takeIf { it.isNotBlank() }

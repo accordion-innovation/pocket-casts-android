@@ -165,8 +165,8 @@ class EffectsFragment :
         accordionVariantViewModel.loadVariantsForCurrentEpisode()
 
         viewModel.playingEpisodeLive.observe(viewLifecycleOwner) { (_, backgroundColor) ->
-            // Keep the variant panel pointed at whatever is playing now, in case the episode changes
-            // while this sheet is open. This is a no-op once the current episode has been resolved.
+            // Keep the panel pointed at whatever is playing, in case the episode changes while this
+            // sheet is open. A no-op once the current episode has been resolved.
             accordionVariantViewModel.loadVariantsForCurrentEpisode()
 
             setDialogTint(backgroundColor)
