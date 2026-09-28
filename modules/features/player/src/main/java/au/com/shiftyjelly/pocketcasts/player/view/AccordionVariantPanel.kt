@@ -1,11 +1,16 @@
 package au.com.shiftyjelly.pocketcasts.player.view
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Slider
@@ -15,22 +20,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import au.com.shiftyjelly.pocketcasts.compose.AppThemeWithBackground
+import au.com.shiftyjelly.pocketcasts.compose.preview.ThemePreviewParameterProvider
 import au.com.shiftyjelly.pocketcasts.compose.theme
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.AccordionVariantViewModel
 import au.com.shiftyjelly.pocketcasts.player.viewmodel.AccordionVariantViewModel.UiState
+import au.com.shiftyjelly.pocketcasts.servers.accordion.AccordionVariant
+import au.com.shiftyjelly.pocketcasts.ui.theme.Theme
 import kotlin.math.roundToInt
 import au.com.shiftyjelly.pocketcasts.localization.R as LR
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.clip
 
 /**
  * Panel shown in the playback effects sheet that lets the user switch between the available
@@ -116,8 +121,9 @@ private fun AccordionVariantContent(
                             thumbColor = MaterialTheme.theme.colors.playerContrast01,
                             activeTrackColor = MaterialTheme.theme.colors.playerContrast01,
                             inactiveTrackColor = MaterialTheme.theme.colors.playerContrast05,
-                            activeTickColor = androidx.compose.ui.graphics.Color.Transparent,
-                            inactiveTickColor = androidx.compose.ui.graphics.Color.Transparent,
+                            // The dot markers above the track already mark each variant.
+                            activeTickColor = Color.Transparent,
+                            inactiveTickColor = Color.Transparent,
                         ),
                         modifier = Modifier.fillMaxWidth().align(Alignment.Center),
                     )
@@ -158,4 +164,77 @@ private fun variantLabel(index: Int, durationSeconds: Long): String {
     val hours = totalMinutes / 60
     val minutes = totalMinutes % 60
     return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+}
+
+@Preview(name = "Loaded")
+@Composable
+private fun AccordionVariantLoadedPreview(
+    @PreviewParameter(ThemePreviewParameterProvider::class) themeType: Theme.ThemeType,
+) {
+    AppThemeWithBackground(themeType) {
+        AccordionVariantContent(
+            state = UiState.Loaded(
+                variants = listOf(
+                    AccordionVariant(url = "https://cdn.accordion.live/short.mp3", durationSeconds = 5 * 60),
+                    AccordionVariant(url = "https://cdn.accordion.live/medium.mp3", durationSeconds = 28 * 60),
+                    AccordionVariant(url = "https://cdn.accordion.live/full.mp3", durationSeconds = 82 * 60),
+                ),
+                selectedIndex = 2,
+            ),
+            onVariantSelect = {},
+        )
+    }
+}
+
+/** Two variants is the minimum the panel ever shows, and puts the slider at its coarsest. */
+@Preview(name = "Loaded - two variants")
+@Composable
+private fun AccordionVariantTwoVariantsPreview(
+    @PreviewParameter(ThemePreviewParameterProvider::class) themeType: Theme.ThemeType,
+) {
+    AppThemeWithBackground(themeType) {
+        AccordionVariantContent(
+            state = UiState.Loaded(
+                variants = listOf(
+                    AccordionVariant(url = "https://cdn.accordion.live/short.mp3", durationSeconds = 12 * 60),
+                    AccordionVariant(url = "https://cdn.accordion.live/full.mp3", durationSeconds = 63 * 60),
+                ),
+                selectedIndex = 0,
+            ),
+            onVariantSelect = {},
+        )
+    }
+}
+
+/** Variants whose duration the API omitted, so the labels fall back to positional names. */
+@Preview(name = "Loaded - unknown durations")
+@Composable
+private fun AccordionVariantUnknownDurationPreview(
+    @PreviewParameter(ThemePreviewParameterProvider::class) themeType: Theme.ThemeType,
+) {
+    AppThemeWithBackground(themeType) {
+        AccordionVariantContent(
+            state = UiState.Loaded(
+                variants = listOf(
+                    AccordionVariant(url = "https://cdn.accordion.live/a.mp3", durationSeconds = 0),
+                    AccordionVariant(url = "https://cdn.accordion.live/b.mp3", durationSeconds = 0),
+                ),
+                selectedIndex = 0,
+            ),
+            onVariantSelect = {},
+        )
+    }
+}
+
+@Preview(name = "Loading")
+@Composable
+private fun AccordionVariantLoadingPreview(
+    @PreviewParameter(ThemePreviewParameterProvider::class) themeType: Theme.ThemeType,
+) {
+    AppThemeWithBackground(themeType) {
+        AccordionVariantContent(
+            state = UiState.Loading,
+            onVariantSelect = {},
+        )
+    }
 }

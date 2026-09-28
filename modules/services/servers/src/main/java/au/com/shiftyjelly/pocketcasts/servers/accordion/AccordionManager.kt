@@ -77,11 +77,14 @@ class AccordionManager @Inject constructor(
                 "request was not accepted as authenticated - check that the API key is valid and " +
                 "that the server reads it from the X-Api-Key header."
         }
+
         code == 401 || code == 403 -> "Accordion API rejected the API key (HTTP $code)"
+
         code == 404 -> {
             "Accordion API has no such route or episode (HTTP 404). Confirm the deployed server " +
                 "exposes the api_v1/content/{podcastHash}/by-title lookup."
         }
+
         else -> "Accordion API request failed (HTTP $code)"
     }
 

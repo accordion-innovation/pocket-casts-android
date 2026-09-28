@@ -114,6 +114,53 @@ class AccordionManagerTest {
         assertTrue(error!!.message!!.contains("rejected the API key"))
     }
 
+    @Test
+    fun `reports a missing route rather than an empty result`() = runTest {
+        val notFound = Response.error<AccordionEpisodeResponse>(404, "".toResponseBody(null))
+
+        val error = runCatching { AccordionManager(FakeService(notFound), API_KEY).getVariants(HASH, TITLE) }
+            .exceptionOrNull()
+
+        assertTrue(error is AccordionException)
+        assertTrue(error!!.message!!.contains("by-title"))
+    }
+
+    @Test
+    fun `reports an empty body`() = runTest {
+        val emptyBody = Response.success<AccordionEpisodeResponse>(null)
+
+        val error = runCatching { AccordionManager(FakeService(emptyBody), API_KEY).getVariants(HASH, TITLE) }
+            .exceptionOrNull()
+
+        assertTrue(error is AccordionException)
+        assertTrue(error!!.message!!.contains("empty body"))
+    }
+
+    @Test
+    fun `keeps the order the api returned so the slider matches the server's ordering`() = runTest {
+        val variants = variantsFor(
+            audioFile("https://cdn.accordion.live/long.mp3", 3600.0),
+            audioFile("https://cdn.accordion.live/short.mp3", 300.0),
+            audioFile("https://cdn.accordion.live/medium.mp3", 1800.0),
+        )
+
+        assertEquals(listOf(3600L, 300L, 1800L), variants.map { it.durationSeconds })
+    }
+
+    @Test
+    fun `drops unplayable variants without dropping the playable ones alongside them`() = runTest {
+        val variants = variantsFor(
+            audioFile("https://cdn.accordion.live/good.mp3", 600.0),
+            audioFile("http://cdn.accordion.live/cleartext.mp3", 600.0),
+            audioFile("https://cdn.accordion.live/also-good.mp3", 1200.0),
+        )
+
+        assertEquals(
+            listOf("https://cdn.accordion.live/good.mp3", "https://cdn.accordion.live/also-good.mp3"),
+            variants.map { it.url },
+        )
+    }
+
     private suspend fun variantsFor(vararg audioFiles: AccordionAudioFile): List<AccordionVariant> {
         val response = AccordionEpisodeResponse(
             podcast = AccordionPodcast(
@@ -124,8 +171,7 @@ class AccordionManagerTest {
         return managerFor(response).getVariants(HASH, TITLE)
     }
 
-    private fun managerFor(response: AccordionEpisodeResponse) =
-        AccordionManager(FakeService(Response.success(response)), API_KEY)
+    private fun managerFor(response: AccordionEpisodeResponse) = AccordionManager(FakeService(Response.success(response)), API_KEY)
 
     private fun audioFile(url: String?, durationSeconds: Double?) = AccordionAudioFile(url, durationSeconds)
 

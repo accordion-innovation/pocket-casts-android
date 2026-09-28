@@ -92,14 +92,13 @@ class AccordionVariantViewModel @Inject constructor(
         viewModelScope.launch {
             val variants = try {
                 val podcast = podcastManager.findPodcastByUuid(episode.podcastUuid)
-                // Only the hash is ever logged. A feed url can carry a per-user access token for a
-                // private or premium feed, and LogBuffer ends up in the debug log users attach to
-                // support emails.
                 val podcastHash = podcast?.podcastUrl?.takeIf { it.isNotBlank() }?.md5()
+                // Log the hash, never podcastUrl itself. A podcast url can carry a per-user access
+                // token for a private or premium feed, and LogBuffer ends up in the debug log users
+                // attach to support emails.
                 LogBuffer.i(
                     LogBuffer.TAG_PLAYBACK,
-                    "Accordion: podcastUrl='%s' -> hash=%s",
-                    podcast?.podcastUrl ?: "null",
+                    "Accordion: looking up variants for podcast hash=%s",
                     podcastHash ?: "null",
                 )
                 val episodeTitle = episode.title.takeIf { it.isNotBlank() }
@@ -126,22 +125,14 @@ class AccordionVariantViewModel @Inject constructor(
                 return@launch
             }
 
-            // Default to the longest variant: it best represents the full RSS audio that is
-            // currently playing, so the displayed selection matches what the user hears.
-            // Immediately swap to it so the player's duration and stream URL are both accurate
-            // from the moment the panel appears.
+            // Pre-select the longest variant because it is the closest match to the full RSS audio
+            // already playing, so the panel opens showing roughly what the user is hearing.
+            //
+            // Showing the panel deliberately does not touch the player: swapping recreates
+            // ExoPlayer and reloads the stream, which is far too disruptive to do just because
+            // someone opened the effects sheet. The player only changes once a variant is picked.
             val longestIndex = variants.indices.maxByOrNull { variants[it].durationSeconds } ?: 0
             _uiState.value = UiState.Loaded(variants = variants, selectedIndex = longestIndex)
-
-            val longestVariant = variants[longestIndex]
-            isApplyingVariant = true
-            try {
-                if (!playbackManager.swapToVariantUrl(longestVariant.url, longestVariant.durationSeconds)) {
-                    hide()
-                }
-            } finally {
-                isApplyingVariant = false
-            }
         }
     }
 
